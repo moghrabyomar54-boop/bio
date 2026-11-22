@@ -1,0 +1,6 @@
+{
+  "name": "Proteome Atlas: Journey into Proteins",
+  "description": "An interactive 3D biological presentation exploring protein architecture, folding, hemoglobin allostery, enzyme catalysis, and membrane transport with fluid spatial camera travel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
