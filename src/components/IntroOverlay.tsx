@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import {
+  playMusicTrack,
+  preloadAllMusicTracks,
+  stopAllMusic,
+  unlockAudioFromGesture,
+} from '../utils/musicPlayer';
 
 interface IntroOverlayProps {
   mode: 'intro' | 'outro' | 'hidden';
@@ -21,50 +27,6 @@ const HEADING_AURA =
 const NAME_AURA =
   '0 0 10px rgba(74, 222, 128, 0.85), 0 0 24px rgba(34, 197, 94, 0.58), 0 0 44px rgba(16, 185, 129, 0.35)';
 
-const BIO_LOGO_GLOW =
-  'drop-shadow(0 0 14px rgba(74, 222, 128, 0.85)) drop-shadow(0 0 32px rgba(34, 197, 94, 0.48))';
-
-function BioCrestLogo({ sizeClass = 'w-24 h-24 sm:w-32 sm:h-32' }: { sizeClass?: string }) {
-  return (
-    <svg viewBox="0 0 100 100" className={sizeClass} fill="none" aria-hidden="true">
-      <circle
-        cx="50"
-        cy="50"
-        r="43"
-        stroke="#4ADE80"
-        strokeWidth="2.2"
-        strokeDasharray="8 5"
-        opacity="0.82"
-      />
-      <circle
-        cx="50"
-        cy="50"
-        r="34"
-        stroke="#86EFAC"
-        strokeWidth="1.6"
-        opacity="0.62"
-      />
-      <path
-        d="M35 24 C35 38, 65 38, 65 50 C65 62, 35 62, 35 76"
-        stroke="#4ADE80"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M65 24 C65 38, 35 38, 35 50 C35 62, 65 62, 65 76"
-        stroke="#2DD4BF"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      />
-      <line x1="39" y1="31" x2="61" y2="31" stroke="#BBF7D0" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="41" y1="41" x2="59" y2="41" stroke="#BBF7D0" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="41" y1="59" x2="59" y2="59" stroke="#BBF7D0" strokeWidth="2.2" strokeLinecap="round" />
-      <line x1="39" y1="69" x2="61" y2="69" stroke="#BBF7D0" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="50" cy="50" r="4.2" fill="#ECFDF5" />
-    </svg>
-  );
-}
-
 const CREDIT_MODULES = [
   {
     code: '01',
@@ -73,33 +35,48 @@ const CREDIT_MODULES = [
   },
   {
     code: '02',
+    topic: 'Functions of Proteins in Cells',
+    detail: 'Structural, Transport, Enzymatic, Defense, Hormonal/Signaling, Movement & Storage Proteins',
+  },
+  {
+    code: '03',
+    topic: 'Protein Classification',
+    detail: 'Fibrous & Globular Shapes · Simple & Conjugated (Prosthetic Group) Proteins',
+  },
+  {
+    code: '04',
     topic: 'Amino Acids (Building Units)',
     detail: '20 standard amino acids · α-carbon (−NH₂, −COOH, R-group) · Peptide bonds · 9 Essential',
   },
   {
-    code: '03',
+    code: '05',
     topic: 'Proteins in Cells',
     detail: '>50% dry cellular weight · Ribosomal synthesis · Cytoplasm, membranes & nucleus',
   },
   {
-    code: '04',
+    code: '06',
     topic: 'Structure & Function',
     detail: 'Native state folding · Hydrophobic, Hydrogen, Ionic & Disulfide (−S−S−) bridges',
   },
   {
-    code: '05',
+    code: '07',
     topic: 'Levels of Protein Structure',
     detail: 'Primary (1°) · Secondary (2° α/β) · Tertiary (3° 3D fold) · Quaternary (4° Subunits)',
   },
   {
-    code: '06',
+    code: '08',
     topic: 'Denaturation',
     detail: 'Loss of 2°/3°/4° shape from heat, extreme pH, or heavy metals · Refolding vs. permanent',
   },
   {
-    code: '07',
+    code: '09',
     topic: 'Mutation & Misfolding',
     detail: 'Sickle cell point mutation (A → T · Glu → Val) · Polymerized HbS & amyloid plaques',
+  },
+  {
+    code: '10',
+    topic: 'What Are Enzymes?',
+    detail: 'Biological catalysts · Lower activation energy · Reusable speed-up of cellular reactions',
   },
 ];
 
@@ -131,9 +108,6 @@ const CREDIT_WORLDS = [
   },
 ];
 
-const OUTRO_MUSIC_SRC =
-  '/assets/aistudio/07_-_Wii_Shop_Channel_Main_Theme__HQ__3d997258.mp3';
-
 export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
   const isIntro = mode === 'intro';
   const isOutro = mode === 'outro';
@@ -142,45 +116,28 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
   // 'thankyou' (0..2.3s) -> 'credits' (black screen with sliding glow credits) -> 'finale' (settled lockup)
   const [outroStage, setOutroStage] = useState<'thankyou' | 'credits' | 'finale'>('thankyou');
   const [creditsRunKey, setCreditsRunKey] = useState(0);
-  const outroAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const audio = outroAudioRef.current;
-    if (!audio) return;
+    preloadAllMusicTracks();
+  }, []);
 
+  useEffect(() => {
     if (!isOutro) {
-      audio.pause();
-      audio.currentTime = 0;
       return;
     }
 
-    audio.volume = 0.7;
-    audio.currentTime = 0;
+    playMusicTrack('credits', { volume: 0.72, loop: true, startTime: 0 });
 
-    let unlockCleanup: (() => void) | null = null;
-    const tryPlay = () => {
-      const promise = audio.play();
-      if (promise && typeof promise.catch === 'function') {
-        promise.catch(() => {
-          const resumeOnGesture = () => {
-            audio.play().catch(() => {});
-            unlockCleanup?.();
-          };
-          window.addEventListener('pointerdown', resumeOnGesture, { once: true });
-          window.addEventListener('keydown', resumeOnGesture, { once: true });
-          unlockCleanup = () => {
-            window.removeEventListener('pointerdown', resumeOnGesture);
-            window.removeEventListener('keydown', resumeOnGesture);
-          };
-        });
-      }
+    const resumeOnGesture = () => {
+      unlockAudioFromGesture();
     };
-
-    tryPlay();
+    window.addEventListener('pointerdown', resumeOnGesture, { once: true });
+    window.addEventListener('keydown', resumeOnGesture, { once: true });
 
     return () => {
-      unlockCleanup?.();
-      audio.pause();
+      window.removeEventListener('pointerdown', resumeOnGesture);
+      window.removeEventListener('keydown', resumeOnGesture);
+      stopAllMusic();
     };
   }, [isOutro]);
 
@@ -199,22 +156,11 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
   const handleReplayCredits = () => {
     setOutroStage('thankyou');
     setCreditsRunKey((k) => k + 1);
-    const audio = outroAudioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
-    }
+    playMusicTrack('credits', { volume: 0.72, loop: true, startTime: 0 });
   };
 
   return (
     <>
-      <audio
-        ref={outroAudioRef}
-        src={OUTRO_MUSIC_SRC}
-        loop
-        preload="auto"
-        aria-hidden="true"
-      />
       <AnimatePresence mode="wait">
       {isIntro && (
         <motion.section
@@ -227,20 +173,6 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
           className="fixed inset-0 bottom-20 z-15 flex flex-col items-center justify-center px-6 sm:px-12 pointer-events-none"
         >
           <div className="flex flex-col items-center text-center max-w-5xl w-full">
-            {/* Floating Green-Aura Biology Crest Logo */}
-            <motion.div
-              animate={{ y: [0, -9, 0], rotate: [0, 2, -2, 0] }}
-              transition={{
-                duration: 6.4,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-              className="mb-5"
-              style={{ filter: BIO_LOGO_GLOW }}
-            >
-              <BioCrestLogo sizeClass="w-24 h-24 sm:w-32 sm:h-32" />
-            </motion.div>
-
             <motion.h1
               animate={{ y: [0, -10, 0] }}
               transition={{
@@ -304,9 +236,6 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
                 transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
                 className="absolute inset-0 bg-[#020806]/90 flex flex-col items-center justify-center px-8 text-center"
               >
-                <div className="mb-6" style={{ filter: BIO_LOGO_GLOW }}>
-                  <BioCrestLogo sizeClass="w-24 h-24 sm:w-32 sm:h-32" />
-                </div>
                 <h1
                   className="font-display text-6xl sm:text-8xl lg:text-9xl font-bold tracking-tight text-[#ECFDF5] mb-4"
                   style={{ textShadow: HEADING_AURA, textWrap: 'balance' }}
@@ -339,9 +268,6 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
                 className="w-full max-w-4xl px-8 py-10 flex flex-col items-center text-center will-change-transform"
               >
                 {/* Credits Title Lockup */}
-                <div className="mb-6" style={{ filter: BIO_LOGO_GLOW }}>
-                  <BioCrestLogo sizeClass="w-20 h-20 sm:w-24 sm:h-24" />
-                </div>
                 <h2
                   className="font-display text-5xl sm:text-7xl font-bold tracking-tight text-[#ECFDF5] mb-3"
                   style={{ textShadow: HEADING_AURA }}
@@ -458,9 +384,6 @@ export function IntroOverlay({ mode, onExitOutro }: IntroOverlayProps) {
                 transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
                 className="flex flex-col items-center text-center px-6 max-w-4xl"
               >
-                <div className="mb-5" style={{ filter: BIO_LOGO_GLOW }}>
-                  <BioCrestLogo sizeClass="w-24 h-24 sm:w-28 sm:h-28" />
-                </div>
                 <h2
                   className="font-display text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight text-[#ECFDF5] mb-3"
                   style={{ textShadow: HEADING_AURA }}

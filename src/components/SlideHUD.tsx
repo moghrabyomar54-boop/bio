@@ -154,7 +154,7 @@ export function SlideHUD({
                 }}
                 className="flex items-center justify-between gap-2 text-[#4ADE80] hover:text-white cursor-pointer pt-0.5"
               >
-                <span>Press → or T · Final Thank You Slide</span>
+                <span>Press → · What Are Enzymes? &amp; Story</span>
                 <kbd className="px-2.5 py-0.5 text-sm font-bold bg-[#061510] border border-emerald-400/40 rounded text-[#ECFDF5]">
                   →
                 </kbd>

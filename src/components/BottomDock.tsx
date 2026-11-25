@@ -7,6 +7,9 @@ interface BottomDockProps {
   onSelectSlide: (idx: number) => void;
 }
 
+const DOCK_TEXT_AURA =
+  '0 0 10px rgba(74, 222, 128, 0.85), 0 0 24px rgba(34, 197, 94, 0.5)';
+
 export function BottomDock({
   activeSlideIndex,
   microscopeMode,
@@ -16,9 +19,9 @@ export function BottomDock({
   return (
     <nav
       aria-label="Protein worlds interface"
-      className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 max-w-[96vw] pointer-events-auto"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 max-w-[96vw] pointer-events-auto"
     >
-      <div className="flex items-center gap-2 p-1.5 bg-[#080E1A]/95 border border-white/15 rounded-xl shadow-2xl overflow-x-auto">
+      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#040B0A]/82 backdrop-blur-xl border border-emerald-400/28 shadow-[0_0_30px_rgba(34,197,94,0.2)] overflow-x-auto">
         {PROTEIN_SLIDES.map((slide, idx) => {
           const active = isProteinView && idx === activeSlideIndex;
           const label =
@@ -29,20 +32,23 @@ export function BottomDock({
               type="button"
               onClick={() => onSelectSlide(idx)}
               aria-current={active ? 'page' : undefined}
-              className={`font-display px-5 py-2.5 text-sm sm:text-base font-semibold rounded-lg whitespace-nowrap shrink-0 cursor-pointer transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+              className={`font-display px-4 py-2 rounded-xl text-sm sm:text-base font-semibold tracking-wide whitespace-nowrap shrink-0 cursor-pointer border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4ADE80] ${
                 active
-                  ? 'text-slate-950 shadow-md'
-                  : 'text-slate-100 hover:text-white hover:bg-white/10'
+                  ? 'text-[#ECFDF5] bg-emerald-500/20 border-[#4ADE80]/75'
+                  : 'bg-transparent border-transparent text-[#A7F3D0]/85 hover:text-[#ECFDF5] hover:bg-emerald-500/12 hover:border-emerald-400/35'
               }`}
               style={
                 active
                   ? {
-                      backgroundColor: slide.accentColor,
+                      textShadow: DOCK_TEXT_AURA,
+                      borderColor: slide.accentColor,
                       boxShadow: microscopeMode
-                        ? `0 0 18px ${slide.accentColor}66`
-                        : undefined,
+                        ? `0 0 22px ${slide.accentColor}77`
+                        : `0 0 16px rgba(74, 222, 128, 0.42)`,
                     }
-                  : undefined
+                  : {
+                      textShadow: '0 0 8px rgba(74, 222, 128, 0.35)',
+                    }
               }
             >
               {label}

@@ -6,13 +6,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BottomDock } from './components/BottomDock';
 import { CurriculumOverlay } from './components/CurriculumOverlay';
+import { GameStage } from './components/game/GameStage';
 import { IntroOverlay } from './components/IntroOverlay';
 import { MicroscopeOverlay } from './components/MicroscopeOverlay';
 import { ProteinUniverseCanvas } from './components/ProteinUniverseCanvas';
 import { SlideHUD } from './components/SlideHUD';
-import { VoidAmbientOverlay } from './components/VoidAmbientOverlay';
-import { CURRICULUM_SLIDES } from './data/curriculumSlides';
+import { CURRICULUM_SLIDES, PRE_STORY_ENZYMES_SLIDE } from './data/curriculumSlides';
 import { INITIAL_SIM_STATE, PROTEIN_SLIDES } from './data/slides';
+import {
+  playMusicTrack,
+  preloadAllMusicTracks,
+  stopAllMusic,
+  unlockAudioFromGesture,
+} from './utils/musicPlayer';
 import {
   playMicroscopeZoomSound,
   playMindMapTickSound,
@@ -20,7 +26,13 @@ import {
   playSlideTransitionSound,
 } from './utils/soundEffects';
 
-type PresentationPhase = 'intro' | 'curriculum' | 'protein' | 'outro';
+type PresentationPhase =
+  | 'intro'
+  | 'curriculum'
+  | 'protein'
+  | 'pre-story'
+  | 'game'
+  | 'outro';
 
 export default function App() {
   const [phase, setPhase] = useState<PresentationPhase>('intro');
@@ -35,9 +47,12 @@ export default function App() {
   const currentCurriculum =
     phase === 'curriculum'
       ? CURRICULUM_SLIDES[curriculumIndex] ?? CURRICULUM_SLIDES[0]
+      : phase === 'pre-story'
+      ? PRE_STORY_ENZYMES_SLIDE
       : null;
 
-  const showVoid = phase !== 'protein';
+  const showVoid =
+    phase === 'intro' || phase === 'curriculum' || phase === 'pre-story';
 
   const handleSelectSlide = useCallback((idx: number) => {
     const clamped = Math.max(0, Math.min(PROTEIN_SLIDES.length - 1, idx));
@@ -56,22 +71,51 @@ export default function App() {
     });
   }, [phase]);
 
+  useEffect(() => {
+    preloadAllMusicTracks();
+  }, []);
+
+  const handleGoToPreStory = useCallback(() => {
+    setMicroscopeMode(false);
+    stopAllMusic();
+    setPhase('pre-story');
+    playSlideTransitionSound();
+  }, []);
+
+  const handleGoToGame = useCallback(() => {
+    setMicroscopeMode(false);
+    stopAllMusic();
+    setPhase('game');
+    playSlideTransitionSound();
+  }, []);
+
   const handleGoToThankYou = useCallback(() => {
     setMicroscopeMode(false);
     setPhase('outro');
     playSlideTransitionSound();
+    playMusicTrack('credits', { volume: 0.72, loop: true, startTime: 0 });
   }, []);
 
   // Keyboard navigation across the full presentation:
-  // Intro -> Overview + 7 Curriculum Slides -> 5 Protein Worlds -> Final Thank You Slide
-  // Q = switch Mind Map section, E = Microscope zoom, Esc = exit Microscope
-  // 1-5 = jump to protein worlds, 0/Home = Intro, T/6/End = Thank You
+  // Intro -> Overview & Curriculum Slides -> 5 Protein Worlds -> What Are Enzymes? -> 2D Story & 3D Doom Game -> Final Thank You Slide
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      unlockAudioFromGesture();
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
       const keyLower = e.key.toLowerCase();
+
+      // When inside the 2D cutscene / 3D Doom game, StoryCutscene2D handles ArrowLeft/ArrowRight between Story and Presentation.
+      if (phase === 'game') {
+        if (e.key === 'Home') {
+          setPhase('intro');
+          playSlideTransitionSound();
+        } else if (e.key === 'End') {
+          handleGoToThankYou();
+        }
+        return;
+      }
 
       if (keyLower === 'q' && phase === 'protein' && !microscopeMode) {
         e.preventDefault();
@@ -90,6 +134,8 @@ export default function App() {
         setMicroscopeMode(false);
         setPhase('intro');
         playSlideTransitionSound();
+      } else if (keyLower === 'g') {
+        handleGoToGame();
       } else if (keyLower === 't' || e.key === '6' || e.key === 'End') {
         handleGoToThankYou();
       } else if (
@@ -113,17 +159,21 @@ export default function App() {
         } else if (phase === 'protein') {
           setMicroscopeMode(false);
           if (activeSlideIndex >= PROTEIN_SLIDES.length - 1) {
-            handleGoToThankYou();
+            handleGoToPreStory();
           } else {
             const nextIdx = activeSlideIndex + 1;
             setMindMapBranchIndex(0);
             setActiveSlideIndex(nextIdx);
             playProteinSound(nextIdx);
           }
+        } else if (phase === 'pre-story') {
+          handleGoToGame();
         }
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         if (phase === 'outro') {
+          handleGoToGame();
+        } else if (phase === 'pre-story') {
           handleSelectSlide(PROTEIN_SLIDES.length - 1);
         } else if (phase === 'protein') {
           setMicroscopeMode(false);
@@ -156,6 +206,8 @@ export default function App() {
     activeSlideIndex,
     curriculumIndex,
     currentSlide.mindMapBranches.length,
+    handleGoToGame,
+    handleGoToPreStory,
     handleGoToThankYou,
     handleSelectSlide,
     handleToggleMicroscope,
@@ -165,18 +217,20 @@ export default function App() {
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-[#060A12] select-none">
-      {/* Full-Viewport 3D Molecular Worlds & Intro/Curriculum/Outro Bio-Void */}
-      <ProteinUniverseCanvas
-        activeSlideIndex={activeSlideIndex}
-        simState={simState}
-        cameraResetToken={0}
-        zenMode={false}
-        microscopeMode={microscopeMode}
-        showIntro={showVoid}
-        onTransitChange={setInTransit}
-      />
+      {/* Full-Viewport 3D Molecular Worlds & Intro/Curriculum Bio-Void (paused when game or credits active) */}
+      {phase !== 'game' && phase !== 'outro' && (
+        <ProteinUniverseCanvas
+          activeSlideIndex={activeSlideIndex}
+          simState={simState}
+          cameraResetToken={0}
+          zenMode={false}
+          microscopeMode={microscopeMode}
+          showIntro={showVoid}
+          onTransitChange={setInTransit}
+        />
+      )}
 
-      {/* Minimal Horizon Header Colored to Match Active Protein Slide (Top-Right Removed) */}
+      {/* Minimal Horizon Header Colored to Match Active Protein Slide */}
       {phase === 'protein' && (
         <header className="fixed top-0 left-0 z-20 px-6 py-3.5 pointer-events-none">
           <span
@@ -188,19 +242,24 @@ export default function App() {
         </header>
       )}
 
-      {/* Ambient Floating DNA Strands & Stylized Cell Organelles Behind Intro & Curriculum Void Slides */}
-      <VoidAmbientOverlay active={phase === 'intro' || phase === 'curriculum'} />
-
       {/* Floating Green-Aura Intro & Movie-Style Credits Outro Slides */}
       <IntroOverlay
         mode={
           phase === 'intro' ? 'intro' : phase === 'outro' ? 'outro' : 'hidden'
         }
-        onExitOutro={() => handleSelectSlide(PROTEIN_SLIDES.length - 1)}
+        onExitOutro={() => handleGoToGame()}
       />
 
-      {/* Glowing Green-Aura Title & Overview + 7 Curriculum Slides */}
-      <CurriculumOverlay slide={currentCurriculum} />
+      {/* Glowing Green-Aura Title & Overview + Curriculum Slides + Pre-Story Enzymes Slide */}
+      <CurriculumOverlay
+        slide={currentCurriculum}
+        onBackToProteins={
+          phase === 'pre-story'
+            ? () => handleSelectSlide(PROTEIN_SLIDES.length - 1)
+            : undefined
+        }
+        onContinueToStory={phase === 'pre-story' ? handleGoToGame : undefined}
+      />
 
       {/* Mind Map & Context HUD */}
       {phase === 'protein' && (
@@ -211,7 +270,7 @@ export default function App() {
           microscopeMode={microscopeMode}
           mindMapBranchIndex={mindMapBranchIndex}
           onSelectMindMapBranch={setMindMapBranchIndex}
-          onGoToThankYou={handleGoToThankYou}
+          onGoToThankYou={handleGoToPreStory}
         />
       )}
 
@@ -221,13 +280,23 @@ export default function App() {
         active={phase === 'protein' && microscopeMode}
       />
 
-      {/* Strictly 5-Button Protein World Launcher Interface */}
-      <BottomDock
-        activeSlideIndex={activeSlideIndex}
-        microscopeMode={microscopeMode}
-        isProteinView={phase === 'protein'}
-        onSelectSlide={handleSelectSlide}
-      />
+      {/* 2D Story Cutscene + 3D Pixelated Doom Game Before Final Credits Slide */}
+      {phase === 'game' && (
+        <GameStage
+          onCompleteToOutro={handleGoToThankYou}
+          onBackToPresentation={handleGoToPreStory}
+        />
+      )}
+
+      {/* Strictly 5-Button Protein World Launcher Interface (Hidden during full-screen Game & Movie Credits) */}
+      {phase !== 'game' && phase !== 'outro' && (
+        <BottomDock
+          activeSlideIndex={activeSlideIndex}
+          microscopeMode={microscopeMode}
+          isProteinView={phase === 'protein'}
+          onSelectSlide={handleSelectSlide}
+        />
+      )}
     </main>
   );
 }
